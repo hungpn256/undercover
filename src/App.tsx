@@ -37,6 +37,9 @@ export default function App() {
   const [currentWordPair, setCurrentWordPair] = useState<WordPair | null>(null);
   const [isAiMode, setIsAiMode] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [currentPlayerName, setCurrentPlayerName] = useState('');
+  const [mrWhiteGuess, setMrWhiteGuess] = useState('');
+  const [mrWhiteGuessWrong, setMrWhiteGuessWrong] = useState(false);
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('gemini_api_key') ?? '');
   const [showApiKey, setShowApiKey] = useState(false);
 
@@ -79,14 +82,13 @@ export default function App() {
     }
   };
 
-  // Initialize game
+  // Bước 1: Validate setup → chạy game
   const startGame = async () => {
     const totalSpecial = spyCount + mrWhiteCount;
     if (totalSpecial >= playerCount) {
       alert('Số lượng Gián điệp và Mũ trắng phải ít hơn tổng số người chơi!');
       return;
     }
-
     if (isAiMode && !hasKey) {
       alert("Vui lòng nhập Gemini API Key để dùng chế độ AI.");
       return;
@@ -108,7 +110,6 @@ export default function App() {
       ...Array(mrWhiteCount).fill(Role.MR_WHITE),
     ];
 
-    // Shuffle roles
     const shuffledRoles = [...roles].sort(() => Math.random() - 0.5);
 
     const newPlayers: Player[] = shuffledRoles.map((role, index) => ({
@@ -122,13 +123,21 @@ export default function App() {
 
     setPlayers(newPlayers);
     setCurrentPlayerIndex(0);
+    setCurrentPlayerName('');
     setGameState('REVEAL');
     setIsWordVisible(false);
   };
 
   const nextPlayerReveal = () => {
+    // Lưu tên người vưẺ xào xem từ
+    const savedName = currentPlayerName.trim() || `Người chơi ${currentPlayerIndex + 1}`;
+    setPlayers(prev => prev.map((p, i) =>
+      i === currentPlayerIndex ? { ...p, name: savedName } : p
+    ));
+
     if (currentPlayerIndex < players.length - 1) {
       setCurrentPlayerIndex(prev => prev + 1);
+      setCurrentPlayerName('');
       setIsWordVisible(false);
     } else {
       setGameState('DISCUSSION');
@@ -169,11 +178,26 @@ export default function App() {
     setGameState('DISCUSSION');
   };
 
+  // Mũ trắng đoán từ
+  const handleMrWhiteGuess = () => {
+    const guess = mrWhiteGuess.trim().toLowerCase();
+    const correct = currentWordPair?.civilian.trim().toLowerCase();
+    if (guess === correct) {
+      setWinner(Role.MR_WHITE);
+      setGameState('GAME_OVER');
+    } else {
+      setMrWhiteGuessWrong(true);
+    }
+  };
+
   const resetGame = () => {
     setGameState('SETUP');
     setWinner(null);
     setEliminatedPlayer(null);
     setPlayers([]);
+    setCurrentPlayerName('');
+    setMrWhiteGuess('');
+    setMrWhiteGuessWrong(false);
   };
 
   return (
@@ -355,6 +379,11 @@ export default function App() {
               </motion.div>
             )}
 
+            {/* NAME INPUT SCREEN */}
+            {gameState === 'NAME_INPUT' && (
+              <></>  
+            )}
+
             {/* REVEAL SCREEN */}
             {gameState === 'REVEAL' && (
               <motion.div
@@ -364,10 +393,22 @@ export default function App() {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-8 text-center"
               >
-                <div className="bg-white rounded-[32px] p-10 shadow-sm border border-black/5 space-y-8">
+                <div className="bg-white rounded-[32px] p-8 shadow-sm border border-black/5 space-y-6">
                   <div className="space-y-2">
-                    <p className="text-sm uppercase tracking-widest text-[#5A5A40] font-bold">Người chơi {currentPlayerIndex + 1}</p>
+                    <p className="text-sm uppercase tracking-widest text-[#5A5A40] font-bold">Lượt {currentPlayerIndex + 1} / {players.length}</p>
                     <h2 className="text-2xl font-serif">Đến lượt bạn xem từ</h2>
+                  </div>
+
+                  {/* Name input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={currentPlayerName}
+                      onChange={(e) => setCurrentPlayerName(e.target.value)}
+                      placeholder={`Tên của bạn (VD: Người chơi ${currentPlayerIndex + 1})`}
+                      className="w-full px-4 py-3 rounded-2xl border border-black/10 bg-[#F5F5F0] text-center text-base font-medium outline-none focus:border-[#5A5A40] focus:bg-white transition-all"
+                    />
+                    <User size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5A5A40]/30" />
                   </div>
 
                   <div className="relative aspect-square max-w-[200px] mx-auto flex items-center justify-center">
@@ -527,12 +568,62 @@ export default function App() {
                     </p>
                   </div>
 
-                  <button
-                    onClick={checkWinCondition}
-                    className="w-full py-4 bg-[#5A5A40] text-white rounded-full font-semibold"
-                  >
-                    Tiếp tục
-                  </button>
+                  {eliminatedPlayer.role === Role.MR_WHITE ? (
+                    // Mũ trắng đoán từ
+                    <div className="space-y-3">
+                      {mrWhiteGuessWrong ? (
+                        // Thông báo sai
+                        <>
+                          <div className="bg-red-50 border border-red-200 rounded-2xl p-5 space-y-2">
+                            <p className="text-base font-bold text-red-700">❌ Sai rồi!</p>
+                            <p className="text-sm text-red-600">
+                              &ldquo;<span className="font-semibold">{mrWhiteGuess}</span>&rdquo; không phải từ của dân thường.
+                            </p>
+                            <p className="text-xs text-red-500 mt-1">Mũ trắng bị loại khỏi trò chơi.</p>
+                          </div>
+                          <button
+                            onClick={() => { setMrWhiteGuessWrong(false); setMrWhiteGuess(''); checkWinCondition(); }}
+                            className="w-full py-4 bg-[#5A5A40] text-white rounded-full font-semibold"
+                          >
+                            Tiếp tục
+                          </button>
+                        </>
+                      ) : (
+                        // Form nhập từ
+                        <>
+                          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 space-y-1">
+                            <p className="text-sm font-bold text-purple-700">Cơ hội cuối cùng!</p>
+                            <p className="text-xs text-purple-600">Mũ trắng đoán đúng từ của dân thường sẽ thắng!</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={mrWhiteGuess}
+                              onChange={(e) => setMrWhiteGuess(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && mrWhiteGuess.trim() && handleMrWhiteGuess()}
+                              placeholder="Nhập từ của dân thường..."
+                              className="flex-1 px-4 py-3 rounded-2xl border border-purple-200 bg-purple-50 text-sm font-medium outline-none focus:border-purple-400 focus:bg-white transition-all"
+                              autoFocus
+                            />
+                            <button
+                              onClick={handleMrWhiteGuess}
+                              disabled={!mrWhiteGuess.trim()}
+                              className="px-5 py-3 bg-purple-600 text-white rounded-2xl font-semibold hover:bg-purple-700 transition-all disabled:opacity-40"
+                            >
+                              Đoán
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={checkWinCondition}
+                      className="w-full py-4 bg-[#5A5A40] text-white rounded-full font-semibold"
+                    >
+                      Tiếp tục
+                    </button>
+                  )}
                 </div>
               </motion.div>
             )}
