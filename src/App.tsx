@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -37,30 +37,19 @@ export default function App() {
   const [currentWordPair, setCurrentWordPair] = useState<WordPair | null>(null);
   const [isAiMode, setIsAiMode] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [hasKey, setHasKey] = useState(false);
+  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('gemini_api_key') ?? '');
+  const [showApiKey, setShowApiKey] = useState(false);
 
-  useEffect(() => {
-    const checkKey = async () => {
-      if (window.aistudio?.hasSelectedApiKey) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        console.log("selected",selected)
-        setHasKey(selected);
-      }
-    };
-    checkKey();
-  }, []);
+  const hasKey = apiKey.trim().length > 0;
 
-  const handleOpenKeyDialog = async () => {
-    if (window.aistudio?.openSelectKey) {
-      await window.aistudio.openSelectKey();
-      setHasKey(true);
-    }
+  const handleApiKeyChange = (value: string) => {
+    setApiKey(value);
+    localStorage.setItem('gemini_api_key', value);
   };
 
   const generateAiWordPair = async (): Promise<WordPair> => {
     try {
-      // Create a fresh instance to ensure we use the latest selected key
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: apiKey.trim() || process.env.API_KEY || process.env.GEMINI_API_KEY || '' });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: "Generate a word pair for the game 'Undercover' (Ai là gián điệp). The pair should be two related but different Vietnamese words. Example: 'Bánh mì' and 'Bánh bao'. Return only the JSON.",
@@ -79,13 +68,11 @@ export default function App() {
       
       if (!response.text) throw new Error("No response text");
       return JSON.parse(response.text);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("AI Generation failed:", error);
       
-      // If it's a key error, prompt user
-      if (error.message?.includes("entity was not found") || error.message?.includes("API key")) {
-        alert("Lỗi API Key. Vui lòng kiểm tra lại cài đặt Key của bạn.");
-        setHasKey(false);
+      if (error instanceof Error && (error.message?.includes("entity was not found") || error.message?.includes("API key"))) {
+        alert("Lỗi API Key. Vui lòng kiểm tra lại key của bạn.");
       }
       
       return WORD_PAIRS[Math.floor(Math.random() * WORD_PAIRS.length)];
@@ -101,11 +88,8 @@ export default function App() {
     }
 
     if (isAiMode && !hasKey) {
-      const confirm = window.confirm("Bạn chưa cài đặt API Key cho AI Mode. Bạn có muốn cài đặt ngay không?");
-      if (confirm) {
-        await handleOpenKeyDialog();
-        return;
-      }
+      alert("Vui lòng nhập Gemini API Key để dùng chế độ AI.");
+      return;
     }
 
     setIsGenerating(true);
@@ -304,22 +288,41 @@ export default function App() {
                       </div>
 
                       {isAiMode && (
-                        <motion.button
+                        <motion.div
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
-                          onClick={handleOpenKeyDialog}
-                          className={`w-full p-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-semibold transition-all ${
-                            hasKey 
-                            ? 'bg-green-50 border-green-100 text-green-700' 
-                            : 'bg-amber-50 border-amber-100 text-amber-700'
-                          }`}
+                          className="space-y-2"
                         >
-                          {hasKey ? (
-                            <><CheckCircle2 size={14} /> Đã kết nối API Key</>
-                          ) : (
-                            <><ShieldAlert size={14} /> Chưa có API Key - Nhấn để cài đặt</>
+                          <label className="text-xs font-semibold text-purple-700 flex items-center gap-1">
+                            <ShieldAlert size={12} />
+                            Gemini API Key
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showApiKey ? 'text' : 'password'}
+                              value={apiKey}
+                              onChange={(e) => handleApiKeyChange(e.target.value)}
+                              placeholder="Nhập API key của bạn..."
+                              className={`w-full pr-10 pl-3 py-2.5 rounded-xl border text-xs font-mono outline-none transition-all ${
+                                hasKey
+                                  ? 'border-green-200 bg-green-50 text-green-800 focus:border-green-400'
+                                  : 'border-amber-200 bg-amber-50 text-amber-800 focus:border-amber-400'
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowApiKey(!showApiKey)}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                          </div>
+                          {hasKey && (
+                            <p className="text-[10px] text-green-600 flex items-center gap-1">
+                              <CheckCircle2 size={10} /> API Key đã được lưu
+                            </p>
                           )}
-                        </motion.button>
+                        </motion.div>
                       )}
                     </div>
                   </div>
