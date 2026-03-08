@@ -38,6 +38,7 @@ export default function App() {
   const [isAiMode, setIsAiMode] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentPlayerName, setCurrentPlayerName] = useState('');
+  const [revealCount, setRevealCount] = useState(0);
   const [mrWhiteGuess, setMrWhiteGuess] = useState('');
   const [mrWhiteGuessWrong, setMrWhiteGuessWrong] = useState(false);
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('gemini_api_key') ?? '');
@@ -112,7 +113,7 @@ export default function App() {
 
     const shuffledRoles = [...roles].sort(() => Math.random() - 0.5);
 
-    const newPlayers: Player[] = shuffledRoles.map((role, index) => ({
+    const basePlayers: Player[] = shuffledRoles.map((role, index) => ({
       id: index,
       name: `Người chơi ${index + 1}`,
       role,
@@ -121,7 +122,14 @@ export default function App() {
       isRevealed: false,
     }));
 
-    setPlayers(newPlayers);
+    // Rotate vòng tròn tại vị trí ngẫu nhiên (b,c,d,a hoặc c,d,a,b ...)
+    const offset = Math.floor(Math.random() * basePlayers.length);
+    const rotatedPlayers = [
+      ...basePlayers.slice(offset),
+      ...basePlayers.slice(0, offset),
+    ];
+
+    setPlayers(rotatedPlayers);
     setCurrentPlayerIndex(0);
     setCurrentPlayerName('');
     setGameState('REVEAL');
@@ -129,8 +137,7 @@ export default function App() {
   };
 
   const nextPlayerReveal = () => {
-    // Lưu tên người vưẺ xào xem từ
-    const savedName = currentPlayerName.trim() || `Người chơi ${currentPlayerIndex + 1}`;
+    const savedName = currentPlayerName.trim();
     setPlayers(prev => prev.map((p, i) =>
       i === currentPlayerIndex ? { ...p, name: savedName } : p
     ));
@@ -196,6 +203,7 @@ export default function App() {
     setEliminatedPlayer(null);
     setPlayers([]);
     setCurrentPlayerName('');
+    setRevealCount(0);
     setMrWhiteGuess('');
     setMrWhiteGuessWrong(false);
   };
@@ -399,16 +407,26 @@ export default function App() {
                     <h2 className="text-2xl font-serif">Đến lượt bạn xem từ</h2>
                   </div>
 
-                  {/* Name input */}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={currentPlayerName}
-                      onChange={(e) => setCurrentPlayerName(e.target.value)}
-                      placeholder={`Tên của bạn (VD: Người chơi ${currentPlayerIndex + 1})`}
-                      className="w-full px-4 py-3 rounded-2xl border border-black/10 bg-[#F5F5F0] text-center text-base font-medium outline-none focus:border-[#5A5A40] focus:bg-white transition-all"
-                    />
-                    <User size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5A5A40]/30" />
+                  {/* Name input — bắt buộc */}
+                  <div className="space-y-1">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={currentPlayerName}
+                        onChange={(e) => setCurrentPlayerName(e.target.value)}
+                        placeholder="Nhập tên của bạn..."
+                        autoFocus
+                        className={`w-full px-4 py-3 rounded-2xl border text-center text-base font-medium outline-none transition-all ${
+                          currentPlayerName.trim()
+                            ? 'border-[#5A5A40] bg-white'
+                            : 'border-amber-300 bg-amber-50 focus:border-amber-500'
+                        }`}
+                      />
+                      <User size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#5A5A40]/30" />
+                    </div>
+                    {!currentPlayerName.trim() && (
+                      <p className="text-[11px] text-amber-600 text-center">Nhập tên trước khi xem từ</p>
+                    )}
                   </div>
 
                   <div className="relative aspect-square max-w-[200px] mx-auto flex items-center justify-center">
@@ -419,11 +437,17 @@ export default function App() {
                           initial={{ opacity: 0, scale: 0.8 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 1.1 }}
-                          onClick={() => setIsWordVisible(true)}
-                          className="w-full h-full bg-[#5A5A40] rounded-3xl flex flex-col items-center justify-center text-white gap-3 shadow-xl"
+                          onClick={() => currentPlayerName.trim() && setIsWordVisible(true)}
+                          className={`w-full h-full rounded-3xl flex flex-col items-center justify-center gap-3 shadow-xl transition-all ${
+                            currentPlayerName.trim()
+                              ? 'bg-[#5A5A40] text-white cursor-pointer'
+                              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          }`}
                         >
                           <EyeOff size={48} />
-                          <span className="font-semibold">Nhấn để xem</span>
+                          <span className="font-semibold">
+                            {currentPlayerName.trim() ? 'Nhấn để xem' : 'Nhập tên trước'}
+                          </span>
                         </motion.button>
                       ) : (
                         <motion.div
@@ -475,7 +499,7 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {players.map((player) => (
+                  {[...players].sort((a, b) => a.id - b.id).map((player) => (
                     <div 
                       key={player.id}
                       className={`p-4 rounded-2xl border transition-all ${
@@ -664,7 +688,7 @@ export default function App() {
                     </div>
 
                     <div className="space-y-2">
-                      {players.map(p => (
+                      {[...players].sort((a, b) => a.id - b.id).map(p => (
                         <div key={p.id} className="flex items-center justify-between text-sm py-1 border-b border-black/5">
                           <span className="flex items-center gap-2">
                             <User size={14} className={p.isEliminated ? 'opacity-30' : ''} />
